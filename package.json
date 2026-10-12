@@ -1,0 +1,54 @@
+{
+  "name": "stackwright",
+  "version": "0.1.0",
+  "description": "A coder for a gitops repository: a change request over HTTP becomes a branch, an agent's commits, your checks, and a push that deploys",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "stackwright": "index.js"
+  },
+  "files": [
+    "index.js",
+    "config.js",
+    "lib/"
+  ],
+  "engines": {
+    "node": "^20.19 || ^22.12 || >=24"
+  },
+  "scripts": {
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write . && eslint --fix .",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/handijk/stackwright.git"
+  },
+  "keywords": [
+    "gitops",
+    "coding-agent",
+    "claude-code",
+    "agent-sdk",
+    "docker-compose",
+    "self-hosted",
+    "automation"
+  ],
+  "author": "Han Dijk",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/handijk/stackwright/issues"
+  },
+  "homepage": "https://github.com/handijk/stackwright",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.291",
+    "mqtt": "^5.16.0",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "globals": "^16.0.0",
+    "prettier": "^3.0.0"
+  }
+}
