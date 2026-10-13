@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.1
+
+### Added
+
+- stackwright on npm, published by the release workflow with provenance: `npx stackwright` runs it without
+  a container.
+- The arm64 image next to amd64.
+
+## 0.1.0
 
 ### Added
 

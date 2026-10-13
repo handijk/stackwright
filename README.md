@@ -90,7 +90,7 @@ The system prompt is stackwright's: the rules of the workspace, the checks, how 
 The checks run inside the container, so the toolchain has to be there. The image has git, ssh, Node and Claude Code; for anything else build on it:
 
 ```dockerfile
-FROM ghcr.io/handijk/stackwright:0.1.0
+FROM ghcr.io/handijk/stackwright:0.1.1
 COPY --from=oven/bun:1.3.11 /usr/local/bin/bun /usr/local/bin/bun
 ```
 
@@ -99,7 +99,7 @@ COPY --from=oven/bun:1.3.11 /usr/local/bin/bun /usr/local/bin/bun
 ```yaml
 services:
   stackwright:
-    image: ghcr.io/handijk/stackwright:0.1.0
+    image: ghcr.io/handijk/stackwright:0.1.1
     restart: unless-stopped
     ports: ['127.0.0.1:8091:8091']
     volumes:
@@ -111,6 +111,8 @@ services:
     env_file: secrets/stackwright.env # ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN
 ```
 
+Without a container: `npx stackwright` on a Linux machine with git and ssh, with `STACKWRIGHT_CONFIG` pointing at the yaml (default `/config/stackwright.yaml`), `STACKWRIGHT_WORKSPACE` and `STACKWRIGHT_DATA` for the clone and the task records (`/workspace`, `/data`) and `STACKWRIGHT_LISTEN` (`127.0.0.1:8091`). The package brings Claude Code with it, through the Agent SDK; the setup-token login wants `script` from util-linux, which is the Linux part.
+
 The container runs as uid 1000; the mounted directories are chowned on first start. Task records survive a restart: a task whose branch landed while stackwright was away is completed, one caught mid-flight is failed, and both are reported.
 
 ## Credentials
@@ -118,7 +120,7 @@ The container runs as uid 1000; the mounted directories are chowned on first sta
 stackwright signs in exactly as Claude Code does, with one of two variables in its environment, and has no login of its own:
 
 - **`ANTHROPIC_API_KEY`**: a key from the [Claude Console](https://platform.claude.com). This is the way Anthropic documents for products built on the Agent SDK. Max and Team plans include [monthly API credits](https://support.claude.com/en/articles/17154008-monthly-api-credits-for-max-and-team-plans) that cover Agent SDK use through a linked Console organization, and that stop instead of billing when they are used up.
-- **`CLAUDE_CODE_OAUTH_TOKEN`**: a long-lived token you make on your own Pro, Max, Team or Enterprise plan with [`claude setup-token`](https://code.claude.com/docs/en/authentication#generate-a-long-lived-token), the same way the [Claude Code GitHub Action](https://code.claude.com/docs/en/github-actions) takes one. Tasks then draw on your plan's usage limits. The command can be run from the image: `docker run --rm -it --entrypoint claude ghcr.io/handijk/stackwright:0.1.0 setup-token`.
+- **`CLAUDE_CODE_OAUTH_TOKEN`**: a long-lived token you make on your own Pro, Max, Team or Enterprise plan with [`claude setup-token`](https://code.claude.com/docs/en/authentication#generate-a-long-lived-token), the same way the [Claude Code GitHub Action](https://code.claude.com/docs/en/github-actions) takes one. Tasks then draw on your plan's usage limits. The command can be run from the image: `docker run --rm -it --entrypoint claude ghcr.io/handijk/stackwright:0.1.1 setup-token`.
 
 `agent.auth` pins one of the two: the other is dropped from the environment at start, and a run Claude Code reports as billed to the other is aborted. Without a credential stackwright takes no tasks (`503`, state `action_required`). Without the pin, Claude Code's own precedence applies and the log says what a task ran on.
 
