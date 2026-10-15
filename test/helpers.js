@@ -78,7 +78,8 @@ export async function otherPush(remote, file, content, message) {
 
 /**
  * The runtime as the engine sees it. `script(call)` runs per attempt with {prompt, cwd, resume, attempt}
- * and does what the agent would: edit files, commit. Its return is the agent's last text.
+ * and does what the agent would: edit files, commit. Its return is the agent's last text, or
+ * {text, cost} when the run should report a cost.
  */
 export function fakeRuntime(script, {auth = 'subscription', ready = true} = {}) {
     const calls = [];
@@ -89,8 +90,9 @@ export function fakeRuntime(script, {auth = 'subscription', ready = true} = {}) 
         async run({prompt, cwd, systemPrompt, resume, abortController}) {
             const call = {prompt, cwd, systemPrompt, resume, attempt: calls.length + 1, abortController};
             calls.push(call);
-            const text = (await script(call)) ?? 'done';
-            return {sessionId: `session-${calls.length}`, text, apiKeySource: 'none', turns: 1};
+            const out = (await script(call)) ?? 'done';
+            const {text, cost} = typeof out === 'string' ? {text: out, cost: null} : out;
+            return {sessionId: `session-${calls.length}`, text, apiKeySource: 'none', turns: 1, cost};
         },
     };
 }

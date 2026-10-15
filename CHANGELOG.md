@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+### Added
+
+- `cost` on the task record and in the delivered result: Claude Code's own estimate (dollars, and tokens
+  per model), added up over the attempts. A subscription run reports it too, as what the task would have
+  cost on an API key.
+
 ## 0.1.1
 
 ### Added

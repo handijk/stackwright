@@ -59,6 +59,7 @@ describe('the notifier', () => {
         assert.deepEqual(f.posts[0].body, resultDocument(task()));
         assert.equal(f.posts[0].body.finished_at, '2023-11-14T22:13:20.000Z');
         assert.equal(f.posts[0].body.error, null);
+        assert.equal(f.posts[0].body.cost, null);
         assert.deepEqual(f.published[0], {topic: 'sw/results', doc: resultDocument(task()), retain: false});
         n.state({status: 'idle'});
         assert.deepEqual(f.published[1], {topic: 'sw/state', doc: {status: 'idle'}, retain: true});

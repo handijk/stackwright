@@ -10,7 +10,7 @@ stackwright runs Claude Code through the Agent SDK. It is not an Anthropic produ
 2. **Agent.** The agent gets the brief (your `description` and `context`), the repository's own instructions (`CLAUDE.md` or `AGENTS.md`, read by Claude Code as usual) and your `prompt` file. It reads, edits and commits on the branch. It is told never to merge, push or leave the clone. Permission prompts are off inside the container: the clone is the sandbox, and there is no Docker socket.
 3. **Checks.** With commits on the branch, stackwright runs every `checks` entry whose `paths` the commits touch (tests, a typecheck), itself, after the agent has stopped. A failed check is a failed attempt.
 4. **Merge and push.** The branch is replayed on the remote's current main, main is fast-forwarded to it and pushed to the deploy remote, then to the mirror remote if there is one. The branch stays in the clone.
-5. **Result.** The task record (`status`, `commits`, `summary` or `error`) is readable over HTTP and delivered to your webhook and/or an MQTT topic.
+5. **Result.** The task record (`status`, `commits`, `summary` or `error`, `cost`) is readable over HTTP and delivered to your webhook and/or an MQTT topic.
 
 **Attempts.** A task gets `attempts` tries of `attemptTimeoutMinutes` each. A failed check, a timed-out attempt, a rebase that conflicts or a deploy that failed ends the attempt; the next one resumes the agent's session with the failure in front of it. A push that merely lost a race with another push is replayed on the new main without the agent. After the last attempt the task fails and the state says `action_required`.
 
@@ -41,11 +41,19 @@ A delivered result:
   "commits": ["a1b2c3d..."],
   "summary": "Landed on the first attempt.\nBranch: ...\nCommits:\n  a1b2c3d... Add a guard to the toilet light\n\nI added ...",
   "error": null,
+  "cost": {
+    "usd": 0.84,
+    "models": {
+      "claude-opus-5-5": {"input": 1203, "output": 2210, "cache_read": 310550, "cache_write": 41200, "usd": 0.84}
+    }
+  },
   "description": "...",
   "notify": "always",
   "finished_at": "2026-10-12T15:00:00.000Z"
 }
 ```
+
+`cost` is Claude Code's own estimate at list prices, added up over the attempts; a subscription run reports it too, as what the task would have cost on an API key. An attempt the timeout aborted contributes nothing. `null` until the agent has answered once.
 
 The state on MQTT (retained): `{"status": "idle" | "running" | "action_required", "message", "tasks": [...], "auth", "at"}`.
 
@@ -90,7 +98,7 @@ The system prompt is stackwright's: the rules of the workspace, the checks, how 
 The checks run inside the container, so the toolchain has to be there. The image has git, ssh, Node and Claude Code; for anything else build on it:
 
 ```dockerfile
-FROM ghcr.io/handijk/stackwright:0.1.1
+FROM ghcr.io/handijk/stackwright:0.1.2
 COPY --from=oven/bun:1.3.11 /usr/local/bin/bun /usr/local/bin/bun
 ```
 
@@ -99,7 +107,7 @@ COPY --from=oven/bun:1.3.11 /usr/local/bin/bun /usr/local/bin/bun
 ```yaml
 services:
   stackwright:
-    image: ghcr.io/handijk/stackwright:0.1.1
+    image: ghcr.io/handijk/stackwright:0.1.2
     restart: unless-stopped
     ports: ['127.0.0.1:8091:8091']
     volumes:
@@ -120,7 +128,7 @@ The container runs as uid 1000; the mounted directories are chowned on first sta
 stackwright signs in exactly as Claude Code does, with one of two variables in its environment, and has no login of its own:
 
 - **`ANTHROPIC_API_KEY`**: a key from the [Claude Console](https://platform.claude.com). This is the way Anthropic documents for products built on the Agent SDK. Max and Team plans include [monthly API credits](https://support.claude.com/en/articles/17154008-monthly-api-credits-for-max-and-team-plans) that cover Agent SDK use through a linked Console organization, and that stop instead of billing when they are used up.
-- **`CLAUDE_CODE_OAUTH_TOKEN`**: a long-lived token you make on your own Pro, Max, Team or Enterprise plan with [`claude setup-token`](https://code.claude.com/docs/en/authentication#generate-a-long-lived-token), the same way the [Claude Code GitHub Action](https://code.claude.com/docs/en/github-actions) takes one. Tasks then draw on your plan's usage limits. The command can be run from the image: `docker run --rm -it --entrypoint claude ghcr.io/handijk/stackwright:0.1.1 setup-token`.
+- **`CLAUDE_CODE_OAUTH_TOKEN`**: a long-lived token you make on your own Pro, Max, Team or Enterprise plan with [`claude setup-token`](https://code.claude.com/docs/en/authentication#generate-a-long-lived-token), the same way the [Claude Code GitHub Action](https://code.claude.com/docs/en/github-actions) takes one. Tasks then draw on your plan's usage limits. The command can be run from the image: `docker run --rm -it --entrypoint claude ghcr.io/handijk/stackwright:0.1.2 setup-token`.
 
 `agent.auth` pins one of the two: the other is dropped from the environment at start, and a run Claude Code reports as billed to the other is aborted. Without a credential stackwright takes no tasks (`503`, state `action_required`). Without the pin, Claude Code's own precedence applies and the log says what a task ran on.
 

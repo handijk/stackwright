@@ -1,6 +1,6 @@
 {
   "name": "stackwright",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A coder for a gitops repository: a change request over HTTP becomes a branch, an agent's commits, your checks, and a push that deploys",
   "type": "module",
   "main": "index.js",

@@ -8,7 +8,8 @@ import path from 'node:path';
 
 import {mergeConfig} from '../config.js';
 import {Workspace} from '../lib/git.js';
-import {Tasks} from '../lib/tasks.js';
+import {Tasks, sumCosts} from '../lib/tasks.js';
+import {costOf} from '../lib/runtime/claude-code.js';
 import {commits, fakeNotifier, fakeRuntime, git, makeRemote, otherPush, tempDir} from './helpers.js';
 
 const dirs = [];
@@ -68,7 +69,16 @@ describe('a task', () => {
         const {remote, runtime, tasks, work} = await setup(
             async (call) => {
                 const file = call.attempt === 1 ? 'broken\n' : 'fixed\n';
-                return commits('svc/x.txt', file, `Attempt ${call.attempt}`)(call);
+                const text = await commits('svc/x.txt', file, `Attempt ${call.attempt}`)(call);
+                // Cumulative over the session: the resumed attempt's figure holds the first attempt too.
+                const usd = call.attempt === 1 ? 0.5 : 0.8;
+                return {
+                    text,
+                    cost: {
+                        usd,
+                        models: {'claude-opus-5-5': {input: 10, output: 5, cache_read: 0, cache_write: 0, usd}},
+                    },
+                };
             },
             {
                 cfg: {
@@ -88,6 +98,14 @@ describe('a task', () => {
         assert.equal(runtime.calls[1].resume, 'session-1');
         assert.deepEqual(await remote.log(), ['Attempt 2', 'Attempt 1', 'Initial']);
         assert.match(done.summary, /Landed after 2 attempts/);
+        assert.equal(done.cost.usd, 0.8);
+        assert.deepEqual(done.cost.models['claude-opus-5-5'], {
+            input: 10,
+            output: 5,
+            cache_read: 0,
+            cache_write: 0,
+            usd: 0.8,
+        });
         assert.ok(fs.existsSync(path.join(work, 'tasks.json')));
     });
 
@@ -265,5 +283,67 @@ describe('after a restart', () => {
         assert.equal(again.get('x-queued').status, 'failed');
         assert.equal(notifier.results.filter((r) => r.error?.includes('restarted')).length, 2);
         assert.deepEqual(await remote.log(), ['Landed', 'Initial']);
+    });
+});
+
+describe('the cost of a task', () => {
+    test('is read from the result message, per model', () => {
+        assert.equal(costOf({type: 'result', subtype: 'success'}), null);
+        assert.deepEqual(
+            costOf({
+                type: 'result',
+                total_cost_usd: 0.42,
+                modelUsage: {
+                    'claude-opus-5-5': {
+                        inputTokens: 1,
+                        outputTokens: 2,
+                        cacheReadInputTokens: 3,
+                        cacheCreationInputTokens: 4,
+                        costUSD: 0.42,
+                        webSearchRequests: 0,
+                    },
+                },
+            }),
+            {usd: 0.42, models: {'claude-opus-5-5': {input: 1, output: 2, cache_read: 3, cache_write: 4, usd: 0.42}}},
+        );
+    });
+
+    test('adds up the chains of sessions', () => {
+        const m = (usd, input) => ({input, output: 0, cache_read: 0, cache_write: 0, usd});
+        const total = sumCosts([
+            {usd: 0.1, models: {a: m(0.1, 10)}},
+            {usd: 0.2, models: {a: m(0.15, 20), b: m(0.05, 5)}},
+        ]);
+        assert.deepEqual(total, {usd: 0.3, models: {a: m(0.25, 30), b: m(0.05, 5)}});
+    });
+
+    test('a fresh session adds to the task; the resumed one above replaced its chain', async () => {
+        // Attempt 1 reports no session id, so attempt 2 cannot resume it and starts afresh.
+        const base = fakeRuntime(async (call) => {
+            const text = await commits(
+                'svc/x.txt',
+                call.attempt === 1 ? 'broken\n' : 'fixed\n',
+                `Attempt ${call.attempt}`,
+            )(call);
+            return {text, cost: {usd: call.attempt === 1 ? 0.3 : 0.7, models: {}}};
+        });
+        const runtime = {
+            ...base,
+            async run(call) {
+                const r = await base.run(call);
+                return base.calls.length === 1 ? {...r, sessionId: null} : r;
+            },
+        };
+        const {tasks} = await setup(null, {
+            runtime,
+            cfg: {checks: [{paths: ['svc/'], command: 'grep -q fixed svc/x.txt || { echo "broken"; exit 1; }'}]},
+        });
+        const t = tasks.submit({description: 'Fix svc'});
+        await tasks.idle();
+        const done = tasks.get(t.task_id);
+        assert.equal(done.status, 'completed', done.error);
+        assert.equal(base.calls.length, 2);
+        assert.equal(base.calls[1].resume, null);
+        assert.equal(done.cost.usd, 1);
     });
 });
